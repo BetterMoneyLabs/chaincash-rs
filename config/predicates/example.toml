@@ -1,8 +1,8 @@
 # any of the conditions below match
-type = "or"
+type = "and"
 conditions = [
     # the owner of the note is either PK1 or PK2
     {type = "whitelist", kind = "owner", agents = ["0216133993bbc54c0d48a21634a7d2632b8c92d744d565839dc39c912ef406e0d9", "030c8f9c4dc08f3c006fa85a47c9156dedbede000a8b764c6e374fd097e873ba04"]},
     # the note has at least 100% collateral
-    {type = "collateral", percent = 100}
+    {type = "collateral", percent = 1000} # not possible and condition will default to false
 ]
