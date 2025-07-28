@@ -19,3 +19,4 @@ ergo-lib = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 ergo_client = { workspace = true }
+reqwest = "0.11"

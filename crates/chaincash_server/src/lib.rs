@@ -24,6 +24,7 @@ pub(crate) mod acceptance;
 pub(crate) mod api;
 pub mod app;
 pub mod error;
+pub(crate) mod healthcheck;
 pub(crate) mod notes;
 pub(crate) mod reserves;
 

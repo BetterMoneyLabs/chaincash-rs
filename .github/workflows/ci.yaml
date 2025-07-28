@@ -17,6 +17,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'true'
+      - name: Update Rust and Cargo
+        run: rustup update
       - uses: actions-rs/toolchain@v1
         with:
           components: clippy, rustfmt
@@ -49,4 +51,5 @@ jobs:
         name: cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v1
         with:
+          rust-version: "1.88.0"
           command: check bans licenses sources
