@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
+
 pub type NanoErg = u64;
 pub type PubKeyHex = String;
 
 /// Context related to a note that holds information required by predicates
 /// to determine if the note is acceptable.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NoteContext {
     /// The nanoerg value of the related note
     /// The denomination of the note converted to its erg value
