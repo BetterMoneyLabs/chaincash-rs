@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, collections::HashMap};
 
 use chaincash_offchain::note_history::NoteHistory;
 use diesel::{
@@ -91,6 +91,13 @@ pub struct NoteWithHistory {
     #[serde(flatten)]
     pub note: Note,
     pub history: Vec<OwnershipEntry>,
+}
+
+pub struct StoredNoteContext {
+    pub nanoerg: u64,
+    pub owner: String,
+    pub issuer: String,
+    pub signers: Vec<String>,
 }
 
 pub struct NoteRepository {
@@ -186,6 +193,44 @@ impl NoteRepository {
             .into_iter()
             .zip(notes)
             .map(|(history, note)| NoteWithHistory { note, history })
+            .collect())
+    }
+
+    pub fn note_contexts(&self) -> Result<Vec<StoredNoteContext>, Error> {
+        let mut conn = self.pool.get()?;
+        let notes = schema::notes::table
+            .select(Note::as_select())
+            .load(conn.borrow_mut())?;
+        let reserve_owners: HashMap<String, String> = schema::reserves::table
+            .select((schema::reserves::identifier, schema::reserves::owner))
+            .load(conn.borrow_mut())?
+            .into_iter()
+            .collect();
+
+        Ok(OwnershipEntry::belonging_to(&notes)
+            .order_by(schema::ownership_entries::position.asc())
+            .select(OwnershipEntry::as_select())
+            .load(conn.borrow_mut())?
+            .grouped_by(&notes)
+            .into_iter()
+            .zip(notes)
+            .map(|(history, note)| {
+                let signers: Vec<String> = history
+                    .iter()
+                    .filter_map(|entry| reserve_owners.get(&entry.reserve_nft_id).cloned())
+                    .collect();
+                let issuer = signers
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| note.owner.clone());
+
+                StoredNoteContext {
+                    nanoerg: note.value.try_into().unwrap_or_default(),
+                    owner: note.owner,
+                    issuer,
+                    signers,
+                }
+            })
             .collect())
     }
 
