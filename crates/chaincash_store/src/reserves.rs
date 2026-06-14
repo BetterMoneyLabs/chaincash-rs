@@ -10,7 +10,7 @@ use ergo_lib::ergo_chain_types::EcPoint;
 use ergo_lib::ergotree_ir::chain;
 use ergo_lib::ergotree_ir::chain::ergo_box::BoxId;
 use ergo_lib::ergotree_ir::chain::token::TokenId;
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, collections::HashMap};
 
 #[derive(Queryable, Selectable, Associations)]
 #[diesel(belongs_to(ErgoBox, foreign_key = box_id))]
@@ -102,6 +102,25 @@ impl ReserveRepository {
             })
             .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()
             .expect("Failed to parse ReserveBoxSpec from database"))
+    }
+
+    pub fn reserve_totals_by_owner(&self) -> Result<HashMap<String, u64>, Error> {
+        let mut conn = self.pool.get()?;
+        let reserves = schema::reserves::table
+            .inner_join(schema::ergo_boxes::table)
+            .select((Reserve::as_select(), ErgoBox::as_select()))
+            .load::<(Reserve, ErgoBox)>(&mut conn)?;
+
+        let mut totals = HashMap::new();
+        for (reserve, ergo_box) in reserves {
+            let ergo_box = chain::ergo_box::ErgoBox::try_from(ergo_box)
+                .expect("Failed to parse ErgoBox from database");
+            let reserve_box = ReserveBoxSpec::try_from(&ergo_box)
+                .expect("Failed to parse ReserveBoxSpec from database");
+            *totals.entry(reserve.owner).or_default() += *reserve_box.ergo_box().value.as_u64();
+        }
+
+        Ok(totals)
     }
 
     /// Delete boxes that are not in latest scan (spent)

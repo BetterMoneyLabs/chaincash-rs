@@ -69,6 +69,16 @@ With the `ChainCash` server running locally we can perform an API request to get
 curl http://localhost:8080/api/v1/acceptance
 ```
 
+To check whether a JSON encoded note can be accepted by the configured predicates, post it to the check endpoint:
+
+```sh
+curl -X POST http://localhost:8080/api/v1/acceptance/checkNote \
+  -H "content-type: application/json" \
+  -d '{"nanoerg":1000,"owner":"owner1","issuer":"issuer1","signers":["issuer1"]}'
+```
+
+The response contains a boolean `accepted` field.
+
 ### Predicate Types
 
 Currently the following predicates are supported:
