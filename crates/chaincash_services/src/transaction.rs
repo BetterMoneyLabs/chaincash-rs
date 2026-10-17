@@ -10,6 +10,7 @@ use chaincash_offchain::transactions::reserves::{
 use chaincash_offchain::transactions::{TransactionError, TxContext};
 use chaincash_store::ChainCashStore;
 use ergo_client::node::endpoints::blockchain::IndexQuery;
+use ergo_client::node::endpoints::wallet::StatusResponse;
 use ergo_client::node::NodeClient;
 use ergo_lib::chain::transaction::Transaction;
 use ergo_lib::ergo_chain_types::EcPoint;
@@ -29,6 +30,9 @@ use crate::compiler::Compiler;
 pub enum TransactionServiceError {
     #[error("Change address not set in wallet")]
     ChangeAddressNotSet,
+
+    #[error("Wallet is locked and no wallet password is configured")]
+    WalletLocked,
 
     #[error("An error occurred while building transaction: {0}")]
     TransactionBuilding(#[from] TransactionError),
@@ -76,15 +80,40 @@ pub struct TransactionService<'a> {
     node: &'a NodeClient,
     compiler: &'a Compiler,
     store: &'a ChainCashStore,
+    wallet_password: Option<&'a str>,
 }
 
 impl<'a> TransactionService<'a> {
     pub fn new(node: &'a NodeClient, store: &'a ChainCashStore, compiler: &'a Compiler) -> Self {
+        Self::with_wallet_password(node, store, compiler, None)
+    }
+
+    pub fn with_wallet_password(
+        node: &'a NodeClient,
+        store: &'a ChainCashStore,
+        compiler: &'a Compiler,
+        wallet_password: Option<&'a str>,
+    ) -> Self {
         Self {
             node,
             store,
             compiler,
+            wallet_password,
         }
+    }
+
+    pub async fn ensure_wallet_unlocked(&self) -> Result<StatusResponse, TransactionServiceError> {
+        let wallet = self.node.endpoints().wallet()?;
+        let status = wallet.status().await?;
+        if status.is_unlocked {
+            return Ok(status);
+        }
+        let password = self
+            .wallet_password
+            .filter(|p| !p.is_empty())
+            .ok_or(TransactionServiceError::WalletLocked)?;
+        wallet.unlock(password.to_string()).await?;
+        Ok(wallet.status().await?)
     }
 
     async fn box_selection_with_amount(
@@ -107,7 +136,7 @@ impl<'a> TransactionService<'a> {
     }
 
     async fn get_tx_ctx(&self) -> Result<TxContext, TransactionServiceError> {
-        let wallet_status = self.node.endpoints().wallet()?.status().await?;
+        let wallet_status = self.ensure_wallet_unlocked().await?;
         let info = self.node.endpoints().root()?.info().await?;
 
         if wallet_status.change_address.is_empty() {
@@ -193,6 +222,7 @@ impl<'a> TransactionService<'a> {
             .store
             .reserves()
             .get_reserve_by_identifier(&request.reserve_id)?;
+        let tx_context = self.get_tx_ctx().await?;
         let private_key = self
             .node
             .extensions()
@@ -200,7 +230,6 @@ impl<'a> TransactionService<'a> {
             .await?
             .w;
         let wallet_boxes = self.node.extensions().get_utxos().await?;
-        let tx_context = self.get_tx_ctx().await?;
         let SpendNoteResponse {
             transaction,
             recipient_note,
@@ -255,8 +284,8 @@ impl<'a> TransactionService<'a> {
             )
             .await?[0]
             .ergo_box;
-        let wallet_boxes = self.node.extensions().get_utxos().await?;
         let tx_context = self.get_tx_ctx().await?;
+        let wallet_boxes = self.node.extensions().get_utxos().await?;
         let oracle_box = &self
             .node
             .endpoints()
@@ -284,5 +313,83 @@ impl<'a> TransactionService<'a> {
         )?;
         let tx = self.node.extensions().sign_and_submit(tx).await?;
         Ok(tx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    use std::time::Duration;
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    use super::*;
+
+    async fn spawn_mock_wallet_node(initially_unlocked: bool) -> (String, Arc<AtomicBool>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let unlocked = Arc::new(AtomicBool::new(initially_unlocked));
+        let unlocked_clone = unlocked.clone();
+
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 4096];
+                let n = stream.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let body = if req.starts_with("POST /wallet/unlock") {
+                    unlocked_clone.store(true, Ordering::SeqCst);
+                    "\"OK\"".to_string()
+                } else {
+                    let is_unlocked = unlocked_clone.load(Ordering::SeqCst);
+                    let change_addr = if is_unlocked { "9fChangeAddr" } else { "" };
+                    format!(
+                        "{{\"isInitialized\":true,\"isUnlocked\":{is_unlocked},\"changeAddress\":\"{change_addr}\",\"walletHeight\":100,\"error\":\"\"}}"
+                    )
+                };
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+            }
+        });
+
+        (format!("http://{addr}"), unlocked)
+    }
+
+    #[tokio::test]
+    async fn unlocks_locked_wallet_when_password_configured() {
+        let (url, unlocked) = spawn_mock_wallet_node(false).await;
+        let node =
+            NodeClient::from_url_str(&url, "hello".to_string(), Duration::from_secs(5)).unwrap();
+        let store = ChainCashStore::open_in_memory().unwrap();
+        let state = crate::ServerState::with_wallet_password(
+            node,
+            store,
+            vec![],
+            Some("secret".to_string()),
+        );
+
+        let status = state.ensure_wallet_unlocked().await.unwrap();
+        assert!(status.is_unlocked);
+        assert_eq!(status.change_address, "9fChangeAddr");
+        assert!(unlocked.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn errors_when_wallet_locked_without_password() {
+        let (url, _) = spawn_mock_wallet_node(false).await;
+        let node =
+            NodeClient::from_url_str(&url, "hello".to_string(), Duration::from_secs(5)).unwrap();
+        let store = ChainCashStore::open_in_memory().unwrap();
+        let state = crate::ServerState::new(node, store, vec![]);
+
+        let err = state.ensure_wallet_unlocked().await.unwrap_err();
+        assert!(matches!(err, TransactionServiceError::WalletLocked));
     }
 }

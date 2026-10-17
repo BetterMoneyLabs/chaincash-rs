@@ -316,6 +316,7 @@ pub async fn start_scanner(state: Arc<ServerState>) -> Result<(), ScannerError> 
     needs_rescan |= rescan;
     if needs_rescan {
         //Rescan from block #1,318_639. This height can be increased later when chaincash is deployed
+        let _ = state.ensure_wallet_unlocked().await;
         let _ = state.node.endpoints().wallet()?.rescan(1_318_639).await;
     }
     tokio::spawn(reserve_scanner(state.clone(), reserve_scans));

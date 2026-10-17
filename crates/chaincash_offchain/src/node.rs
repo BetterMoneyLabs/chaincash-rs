@@ -8,6 +8,14 @@ pub use ergo_client::node::NodeError;
 pub struct Config {
     url: String,
     api_key: String,
+    #[serde(default)]
+    wallet_password: Option<String>,
+}
+
+impl Config {
+    pub fn wallet_password(&self) -> Option<&str> {
+        self.wallet_password.as_deref().filter(|p| !p.is_empty())
+    }
 }
 
 pub fn node_from_config(cfg: &Config) -> Result<NodeClient, NodeError> {

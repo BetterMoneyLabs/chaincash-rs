@@ -7,6 +7,7 @@ url = "http://localhost:9053"
 # hello is the default for nodes
 # in prod this should be set with CHAINCASH_NODE.API_KEY env var
 api_key = "hello"
+wallet_password = ""
 
 [store]
 url = "chaincash.sqlite"
