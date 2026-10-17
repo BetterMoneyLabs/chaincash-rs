@@ -15,3 +15,7 @@ chaincash_predicate = { path = "../chaincash_predicate" }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+ergo-lib = { workspace = true, features = ["compiler", "arbitrary"] }
+proptest = "1.0"

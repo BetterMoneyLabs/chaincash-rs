@@ -87,6 +87,14 @@ impl<'a> ContractScan<'a> {
 
 // Wait for the next block before re-checking scans
 async fn wait_scan_block(state: &ServerState) -> Result<(), ScannerError> {
+    if state.wallet.is_some() {
+        let blockchain = state.node.endpoints().blockchain()?;
+        let cur_height = blockchain.indexed_height().await?.indexed_height;
+        while blockchain.indexed_height().await?.indexed_height == cur_height {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        return Ok(());
+    }
     let wallet = state.node.endpoints().wallet()?;
     let cur_wallet_height = wallet.status().await?.wallet_height;
     while wallet.status().await?.wallet_height == cur_wallet_height {

@@ -15,3 +15,10 @@ url = "chaincash.sqlite"
 # path to predicate configuration files
 # if ANY of these evaluate to true a note will be accepted
 predicates = ["config/predicates/example.toml"]
+
+[wallet]
+# Optional local sigma-rust wallet configuration (mnemonic and/or base16 Dlog secrets)
+# mnemonic = ""
+# mnemonic_password = ""
+# derivation_paths = ["m/44'/429'/0'/0/0"]
+secrets = []

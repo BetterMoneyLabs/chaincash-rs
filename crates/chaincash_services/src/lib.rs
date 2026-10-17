@@ -4,10 +4,12 @@ use compiler::Compiler;
 use ergo_client::node::NodeClient;
 use ergo_lib::{ergo_chain_types::EcPoint, ergotree_ir::chain::address::Address};
 use transaction::{TransactionService, TransactionServiceError};
+use wallet::LocalWallet;
 
 pub mod compiler;
 pub mod scanner;
 pub mod transaction;
+pub mod wallet;
 
 #[derive(Clone)]
 pub struct ServerState {
@@ -15,19 +17,33 @@ pub struct ServerState {
     pub node: NodeClient,
     compiler: Compiler,
     pub predicates: Vec<Predicate>,
+    pub wallet: Option<LocalWallet>,
 }
 
 impl ServerState {
     pub fn new(node: NodeClient, store: ChainCashStore, predicates: Vec<Predicate>) -> Self {
+        Self::with_wallet(node, store, predicates, None)
+    }
+
+    pub fn with_wallet(
+        node: NodeClient,
+        store: ChainCashStore,
+        predicates: Vec<Predicate>,
+        wallet: Option<LocalWallet>,
+    ) -> Self {
         ServerState {
             compiler: Compiler::new(node.clone()),
             node,
             store,
             predicates,
+            wallet,
         }
     }
 
     pub async fn wallet_pubkeys(&self) -> Result<Vec<EcPoint>, TransactionServiceError> {
+        if let Some(wallet) = &self.wallet {
+            return Ok(wallet.pubkeys());
+        }
         Ok(self
             .node
             .endpoints()
@@ -43,6 +59,11 @@ impl ServerState {
     }
 
     pub fn tx_service(&self) -> TransactionService {
-        TransactionService::new(&self.node, &self.store, &self.compiler)
+        TransactionService::with_wallet(
+            &self.node,
+            &self.store,
+            &self.compiler,
+            self.wallet.as_ref(),
+        )
     }
 }

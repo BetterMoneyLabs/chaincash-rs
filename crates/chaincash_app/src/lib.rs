@@ -3,7 +3,11 @@ use std::sync::Arc;
 use chaincash_offchain::node::node_from_config;
 use chaincash_predicate::predicates::Predicate;
 use chaincash_server::Server;
-use chaincash_services::{scanner::start_scanner, ServerState};
+use chaincash_services::{
+    scanner::start_scanner,
+    wallet::{LocalWallet, LocalWalletError, WalletConfig},
+    ServerState,
+};
 use chaincash_store::{ChainCashStore, Update};
 use config::{Environment, File};
 use thiserror::Error;
@@ -20,6 +24,9 @@ pub enum Error {
     #[error(transparent)]
     Node(#[from] chaincash_offchain::node::NodeError),
 
+    #[error(transparent)]
+    Wallet(#[from] LocalWalletError),
+
     #[error("Failed to load chaincash predicates specified in config file")]
     LoadPredicate(#[from] chaincash_predicate::Error),
 
@@ -33,6 +40,8 @@ pub struct ChainCashConfig {
     store: chaincash_store::Config,
     node: chaincash_offchain::node::Config,
     acceptance: chaincash_predicate::Config,
+    #[serde(default)]
+    wallet: WalletConfig,
 }
 
 impl ChainCashConfig {
@@ -86,8 +95,9 @@ impl ChainCashApp {
             });
 
         let node = node_from_config(&self.config.node)?;
+        let wallet = LocalWallet::from_config(&self.config.wallet)?;
 
-        let state = Arc::new(ServerState::new(node, store, predicates));
+        let state = Arc::new(ServerState::with_wallet(node, store, predicates, wallet));
         start_scanner(state.clone()).await.unwrap();
         Ok(Server::serve(listener, state).await?)
     }
