@@ -2,8 +2,9 @@ use crate::context::{ContextProvider, PredicateContext};
 use crate::predicates::{Accept, Predicate};
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, utoipa::ToSchema)]
 pub struct Or {
+    #[schema(value_type = Vec<Object>)]
     conditions: Vec<Predicate>,
 }
 

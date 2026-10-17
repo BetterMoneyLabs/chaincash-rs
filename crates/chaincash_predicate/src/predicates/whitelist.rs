@@ -2,7 +2,7 @@ use crate::context::{ContextProvider, PredicateContext};
 use crate::predicates::Accept;
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum WhitelistKind {
     Issuer,
@@ -10,7 +10,7 @@ pub enum WhitelistKind {
     Historical,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, utoipa::ToSchema)]
 pub struct Whitelist {
     pub(crate) agents: Vec<String>,
     pub(crate) kind: WhitelistKind,

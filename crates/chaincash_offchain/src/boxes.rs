@@ -167,10 +167,12 @@ impl Note {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct ReserveBoxSpec {
+    #[schema(value_type = String)]
     pub owner: EcPoint,
     pub refund_height: Option<i64>,
+    #[schema(value_type = String)]
     pub identifier: TokenId,
     #[serde(skip)]
     inner: ErgoBox,

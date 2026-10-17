@@ -14,6 +14,7 @@ thiserror = { workspace = true }
 ergo_avltree_rust = "0.1.0"
 sigma-ser = "0.13.0"
 tracing = { workspace = true }
+utoipa = { workspace = true }
 k256 = "0.13.3"
 rand = { version = "0.8.5", features = ["std", "std_rng"] }
 

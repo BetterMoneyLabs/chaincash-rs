@@ -15,3 +15,4 @@ diesel_migrations = "2.1.0"
 thiserror = { workspace = true }
 serde = { workspace = true }
 ergo-lib = { workspace = true }
+utoipa = { workspace = true }

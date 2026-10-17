@@ -26,6 +26,7 @@ pub mod app;
 pub mod error;
 pub(crate) mod healthcheck;
 pub(crate) mod notes;
+pub mod openapi;
 pub(crate) mod reserves;
 
 pub use app::Server;

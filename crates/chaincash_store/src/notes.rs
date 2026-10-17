@@ -20,7 +20,9 @@ use crate::{
     schema, ConnectionPool, ConnectionType, Error,
 };
 
-#[derive(Queryable, Identifiable, Selectable, Associations, PartialEq, Serialize)]
+#[derive(
+    Queryable, Identifiable, Selectable, Associations, PartialEq, Serialize, utoipa::ToSchema,
+)]
 #[diesel(belongs_to(ErgoBox, foreign_key = box_id))]
 #[diesel(table_name = schema::notes)]
 pub struct Note {
@@ -43,7 +45,9 @@ struct NewNote<'a> {
     owner: &'a str,
 }
 
-#[derive(Queryable, Identifiable, Selectable, Associations, PartialEq, Serialize)]
+#[derive(
+    Queryable, Identifiable, Selectable, Associations, PartialEq, Serialize, utoipa::ToSchema,
+)]
 #[diesel(table_name = schema::ownership_entries)]
 #[diesel(belongs_to(Note))]
 pub struct OwnershipEntry {
@@ -86,7 +90,7 @@ struct NewOwnershipEntry {
 }
 
 /// Note with ownership entries. Used for listing notes. Unlike [`chaincash_offchain::boxes::Note`] this includes primary key to uniquely identify a Note
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct NoteWithHistory {
     #[serde(flatten)]
     pub note: Note,

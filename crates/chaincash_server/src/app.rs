@@ -7,6 +7,7 @@ use tracing::info;
 
 use crate::api;
 use crate::healthcheck;
+use crate::openapi;
 
 pub struct Server;
 
@@ -14,6 +15,7 @@ impl Server {
     pub fn router() -> Router<Arc<ServerState>> {
         Router::new()
             .route("/healthcheck", get(healthcheck::healthcheck))
+            .merge(openapi::router())
             .nest("/api", api::router())
     }
 
@@ -43,6 +45,7 @@ mod tests {
     };
     use chaincash_store::ChainCashStore;
     use tower::ServiceExt;
+    use utoipa::OpenApi;
 
     use super::*;
 
@@ -70,5 +73,46 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_openapi_json() {
+        let response = Server::router()
+            .with_state(test_server())
+            .oneshot(
+                Request::get("/api-docs/openapi.json")
+                    .body(Body::default())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let spec = openapi::OpenApiDoc::openapi();
+        assert!(spec.paths.paths.contains_key("/healthcheck"));
+        assert!(spec.paths.paths.contains_key("/api/v1/acceptance"));
+        assert!(spec.paths.paths.contains_key("/api/v1/notes/wallet"));
+        assert!(spec
+            .paths
+            .paths
+            .contains_key("/api/v1/notes/byPubkey/{pubkey}"));
+        assert!(spec.paths.paths.contains_key("/api/v1/notes/mint"));
+        assert!(spec.paths.paths.contains_key("/api/v1/notes/spend"));
+        assert!(spec.paths.paths.contains_key("/api/v1/notes/redeem"));
+        assert!(spec.paths.paths.contains_key("/api/v1/reserves/mint"));
+        assert!(spec.paths.paths.contains_key("/api/v1/reserves/topup"));
+        assert!(spec.paths.paths.contains_key("/api/v1/reserves/wallet"));
+    }
+
+    #[tokio::test]
+    async fn test_swagger_ui() {
+        let response = Server::router()
+            .with_state(test_server())
+            .oneshot(Request::get("/swagger-ui/").body(Body::default()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

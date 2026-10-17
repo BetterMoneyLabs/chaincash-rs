@@ -16,7 +16,7 @@ use ergo_lib::wallet::box_selector::{BoxSelector, SimpleBoxSelector};
 use ergo_lib::wallet::{box_selector::BoxSelection, tx_builder::TxBuilder};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct MintReserveRequest {
     pub public_key_hex: String,
     pub amount: u64,

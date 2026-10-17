@@ -49,25 +49,30 @@ pub enum TransactionServiceError {
     ReserveBoxNotFound,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct SpendNoteRequest {
     /// ID of note in database
     note_id: i32,
+    #[schema(value_type = String)]
     reserve_id: TokenId,
+    #[schema(value_type = String)]
     recipient_pubkey: EcPoint,
+    #[schema(value_type = u64)]
     amount: TokenAmount,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct TopUpReserveRequest {
     /// ID of note in database
+    #[schema(value_type = String)]
     reserve_id: TokenId,
     top_up_amount: u64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct RedeemNoteRequest {
     note_id: i32,
+    #[schema(value_type = String)]
     reserve_id: TokenId,
 }
 

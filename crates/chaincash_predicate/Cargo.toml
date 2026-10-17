@@ -8,3 +8,4 @@ license.workspace = true
 toml = "0.8.6"
 serde = { workspace = true }
 thiserror = { workspace = true }
+utoipa = { workspace = true }

@@ -14,6 +14,16 @@ use serde_json::json;
 
 use crate::api::ApiError;
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/notes/mint",
+    tag = "notes",
+    request_body = MintNoteRequest,
+    responses(
+        (status = 200, description = "Note minted", body = crate::openapi::MintNoteApiResponse),
+        (status = 500, description = "Transaction or store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn mint_note(
     State(state): State<Arc<ServerState>>,
     Json(body): Json<MintNoteRequest>,
@@ -26,6 +36,16 @@ async fn mint_note(
     Ok(response.into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/notes/spend",
+    tag = "notes",
+    request_body = SpendNoteRequest,
+    responses(
+        (status = 200, description = "Note spent", body = crate::openapi::TxIdResponse),
+        (status = 500, description = "Transaction or store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn spend_note(
     State(state): State<Arc<ServerState>>,
     Json(body): Json<SpendNoteRequest>,
@@ -41,6 +61,16 @@ async fn spend_note(
     Ok(response.into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/notes/redeem",
+    tag = "notes",
+    request_body = RedeemNoteRequest,
+    responses(
+        (status = 200, description = "Note redeemed", body = crate::openapi::TxIdResponse),
+        (status = 500, description = "Transaction or store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn redeem_note(
     State(state): State<Arc<ServerState>>,
     Json(body): Json<RedeemNoteRequest>,
@@ -52,6 +82,15 @@ async fn redeem_note(
     Ok(response.into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/notes/wallet",
+    tag = "notes",
+    responses(
+        (status = 200, description = "List of notes owned by wallet", body = [chaincash_store::notes::NoteWithHistory]),
+        (status = 500, description = "Transaction or store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn list_wallet_notes(State(state): State<Arc<ServerState>>) -> Result<Response, ApiError> {
     let pubkeys = state.wallet_pubkeys().await?;
     let notes = state.store.notes().notes_by_pubkeys(&pubkeys)?;
@@ -59,6 +98,18 @@ async fn list_wallet_notes(State(state): State<Arc<ServerState>>) -> Result<Resp
     Ok(response.into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/notes/byPubkey/{pubkey}",
+    tag = "notes",
+    params(
+        ("pubkey" = String, Path, description = "Hex-encoded public key (EcPoint)")
+    ),
+    responses(
+        (status = 200, description = "List of notes owned by public key", body = [chaincash_store::notes::NoteWithHistory]),
+        (status = 500, description = "Store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn by_pubkey(
     State(state): State<Arc<ServerState>>,
     Path(pubkey): Path<EcPoint>,

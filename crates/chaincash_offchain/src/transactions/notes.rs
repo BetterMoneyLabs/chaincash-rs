@@ -25,7 +25,7 @@ use ergo_lib::wallet::box_selector::{
 use ergo_lib::wallet::tx_builder::TxBuilder;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct MintNoteRequest {
     pub owner_public_key_hex: String,
     // Currently the amount in mg of gold

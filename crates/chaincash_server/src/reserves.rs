@@ -11,6 +11,16 @@ use serde_json::json;
 
 use crate::api::ApiError;
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/reserves/mint",
+    tag = "reserves",
+    request_body = MintReserveRequest,
+    responses(
+        (status = 200, description = "Reserve minted", body = crate::openapi::MintReserveApiResponse),
+        (status = 500, description = "Transaction or store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn mint_reserve(
     State(state): State<Arc<ServerState>>,
     Json(body): Json<MintReserveRequest>,
@@ -27,6 +37,16 @@ async fn mint_reserve(
     Ok(response.into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/reserves/topup",
+    tag = "reserves",
+    request_body = TopUpReserveRequest,
+    responses(
+        (status = 200, description = "Reserve topped up", body = crate::openapi::TxIdResponse),
+        (status = 500, description = "Transaction or store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn top_up_reserve(
     State(state): State<Arc<ServerState>>,
     Json(body): Json<TopUpReserveRequest>,
@@ -41,6 +61,15 @@ async fn top_up_reserve(
     Ok(response.into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/reserves/wallet",
+    tag = "reserves",
+    responses(
+        (status = 200, description = "List of reserves owned by wallet", body = [chaincash_offchain::boxes::ReserveBoxSpec]),
+        (status = 500, description = "Transaction or store error", body = crate::openapi::ApiErrorResponse)
+    )
+)]
 async fn list_wallet_reserves(State(state): State<Arc<ServerState>>) -> Result<Response, ApiError> {
     Ok(Json(
         state

@@ -12,7 +12,7 @@ pub trait Accept {
     fn accept<P: ContextProvider>(&self, context: &PredicateContext<P>) -> bool;
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Predicate {
     Or(or::Or),
