@@ -2,16 +2,11 @@ use crate::context::{ContextProvider, PredicateContext};
 use crate::predicates::Accept;
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum CollateralAlgorithm {
+    #[default]
     Initial,
-}
-
-impl Default for CollateralAlgorithm {
-    fn default() -> Self {
-        Self::Initial
-    }
 }
 
 impl CollateralAlgorithm {

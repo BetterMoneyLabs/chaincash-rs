@@ -97,13 +97,13 @@ impl<'a> TransactionService<'a> {
             .get_utxos_summing_amount(amount)
             .await?;
         // kinda irrelevant since we already have suitable boxes but box selectors required by ergo-lib txbuilder
-        Ok(SimpleBoxSelector::new()
+        SimpleBoxSelector::new()
             .select(
                 inputs,
                 amount.try_into().map_err(TransactionServiceError::from)?,
                 &[],
             )
-            .map_err(TransactionServiceError::from)?)
+            .map_err(TransactionServiceError::from)
     }
 
     async fn get_tx_ctx(&self) -> Result<TxContext, TransactionServiceError> {
@@ -276,8 +276,8 @@ impl<'a> TransactionService<'a> {
         let tx = redeem_note(
             &note_box,
             &reserve_box,
-            &oracle_box,
-            &buyback_box,
+            oracle_box,
+            buyback_box,
             receipt_contract,
             wallet_boxes,
             &tx_context,

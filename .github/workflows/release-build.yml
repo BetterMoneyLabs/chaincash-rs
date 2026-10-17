@@ -1,0 +1,45 @@
+name: release-build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release-build:
+    name: Build release binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+      - name: Compile release binaries
+        run: cargo build --release --locked
+      - name: Package archive and generate SHA256 checksum
+        run: |
+          mkdir -p dist
+          cp target/release/chaincash_cli dist/
+          cp -r config dist/
+          tar -czf chaincash-linux-x86_64.tar.gz -C dist .
+          sha256sum chaincash-linux-x86_64.tar.gz > chaincash-linux-x86_64.tar.gz.sha256
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaincash-release-${{ github.ref_name }}
+          path: |
+            chaincash-linux-x86_64.tar.gz
+            chaincash-linux-x86_64.tar.gz.sha256
+          retention-days: 30

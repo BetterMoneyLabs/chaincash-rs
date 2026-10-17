@@ -11,9 +11,5 @@ pub struct Config {
 }
 
 pub fn node_from_config(cfg: &Config) -> Result<NodeClient, NodeError> {
-    Ok(NodeClient::from_url_str(
-        &cfg.url,
-        cfg.api_key.clone(),
-        Duration::from_secs(5),
-    )?)
+    NodeClient::from_url_str(&cfg.url, cfg.api_key.clone(), Duration::from_secs(5))
 }

@@ -1,0 +1,53 @@
+name: dep-audit
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  pull_request:
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - 'deny.toml'
+  workflow_dispatch:
+
+jobs:
+  cargo-deny:
+    name: Dependency bans and advisories
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: cargo-deny bans licenses sources
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check bans licenses sources
+      - name: cargo-deny advisories
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check advisories
+
+  unused-deps:
+    name: Check unused dependencies (cargo-udeps)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-udeps-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-udeps
+        run: cargo install cargo-udeps --locked
+      - name: Run cargo-udeps
+        run: cargo +nightly udeps --all-targets

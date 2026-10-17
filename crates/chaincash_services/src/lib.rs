@@ -42,7 +42,7 @@ impl ServerState {
             .collect())
     }
 
-    pub fn tx_service(&self) -> TransactionService {
+    pub fn tx_service(&self) -> TransactionService<'_> {
         TransactionService::new(&self.node, &self.store, &self.compiler)
     }
 }

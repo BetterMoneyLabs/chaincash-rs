@@ -17,14 +17,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'true'
-      - name: Update Rust and Cargo
-        run: rustup update
-      - uses: actions-rs/toolchain@v1
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-          override: true
-          toolchain: stable
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -36,10 +33,10 @@ jobs:
       - name: fmt
         run: cargo fmt --all -- --check --color always
       - name: clippy
-        run: cargo clippy --all-features
+        run: cargo clippy --all-features -- -D warnings
       - name: test
         run: cargo test
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |

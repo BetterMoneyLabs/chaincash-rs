@@ -151,7 +151,7 @@ impl OwnershipEntry {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct NoteHistory {
     ownership_entries: Vec<OwnershipEntry>,
 }

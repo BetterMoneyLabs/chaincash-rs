@@ -60,7 +60,7 @@ impl Note {
     pub fn new(note_box: ErgoBox, history: NoteHistory) -> Result<Self, Error> {
         let owner = note_box
             .get_register(NonMandatoryRegisterId::R5.into())?
-            .ok_or_else(|| Error::FieldNotSet("owner"))
+            .ok_or(Error::FieldNotSet("owner"))
             .and_then(|reg| {
                 if reg.tpe == SType::SGroupElement {
                     Ok(reg.v.try_extract_into::<EcPoint>().unwrap())
@@ -73,7 +73,7 @@ impl Note {
             })?;
         let chain_length: u64 = note_box
             .get_register(NonMandatoryRegisterId::R6.into())?
-            .ok_or_else(|| Error::FieldNotSet("chain length"))
+            .ok_or(Error::FieldNotSet("chain length"))
             .and_then(|reg| {
                 if reg.tpe == SType::SLong {
                     Ok(reg.v.try_extract_into::<i64>().unwrap())
@@ -96,7 +96,7 @@ impl Note {
         }
         let box_avltree = note_box
             .get_register(NonMandatoryRegisterId::R4.into())?
-            .ok_or_else(|| Error::FieldNotSet("avl tree"))
+            .ok_or(Error::FieldNotSet("avl tree"))
             .and_then(|reg| {
                 if reg.tpe == SType::SAvlTree {
                     Ok(reg.v.try_extract_into::<AvlTreeData>().unwrap())
@@ -117,9 +117,11 @@ impl Note {
         let Token { token_id, amount } = note_box
             .tokens
             .as_ref()
-            .ok_or_else(|| Error::FieldNotSet("note box missing NFT"))?
+            .ok_or(Error::FieldNotSet("note box missing NFT"))?
             .get(0)
-            .ok_or_else(|| Error::FieldNotSet("token at index 0 missing, no identifier nft"))?
+            .ok_or(Error::FieldNotSet(
+                "token at index 0 missing, no identifier nft",
+            ))?
             .clone();
 
         Ok(Note {
@@ -191,7 +193,7 @@ impl TryFrom<&ErgoBox> for ReserveBoxSpec {
     fn try_from(value: &ErgoBox) -> Result<Self, Self::Error> {
         let owner = value
             .get_register(NonMandatoryRegisterId::R4.into())?
-            .ok_or_else(|| Error::FieldNotSet("owner"))
+            .ok_or(Error::FieldNotSet("owner"))
             .and_then(|reg| {
                 if reg.tpe == SType::SGroupElement {
                     Ok(reg.v.try_extract_into::<EcPoint>().unwrap())
@@ -218,9 +220,11 @@ impl TryFrom<&ErgoBox> for ReserveBoxSpec {
         let identifier = value
             .tokens
             .as_ref()
-            .ok_or_else(|| Error::FieldNotSet("reserve box missing NFT"))?
+            .ok_or(Error::FieldNotSet("reserve box missing NFT"))?
             .get(0)
-            .ok_or_else(|| Error::FieldNotSet("token at index 0 missing, no identifier nft"))?
+            .ok_or(Error::FieldNotSet(
+                "token at index 0 missing, no identifier nft",
+            ))?
             .token_id;
 
         Ok(Self {

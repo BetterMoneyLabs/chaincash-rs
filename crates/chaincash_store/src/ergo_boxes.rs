@@ -78,6 +78,7 @@ impl ErgoBoxRepository {
             .optional()?)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn delete_with_conn(conn: &mut ConnectionType, box_id: BoxId) -> Result<(), Error> {
         diesel::delete(schema::ergo_boxes::table)
             .filter(schema::ergo_boxes::ergo_id.eq(box_id.to_string()))

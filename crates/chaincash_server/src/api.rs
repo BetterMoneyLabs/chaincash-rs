@@ -7,6 +7,7 @@ use chaincash_services::ServerState;
 use serde_json::json;
 use thiserror::Error;
 
+#[allow(dead_code)]
 trait AsStatusCode {
     fn as_status_code(&self) -> StatusCode;
 }

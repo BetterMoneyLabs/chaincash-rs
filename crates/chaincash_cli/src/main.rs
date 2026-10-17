@@ -64,6 +64,7 @@ impl Cli {
     }
 }
 
+#[allow(deprecated)]
 #[tokio::main]
 async fn main() -> Result<()> {
     // Setup human panic

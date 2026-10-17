@@ -1,0 +1,36 @@
+name: dev-build
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  dev-build:
+    name: Build debug binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Compile debug workspace
+        run: cargo build --workspace
+      - name: Upload debug binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaincash-dev-${{ github.sha }}
+          path: target/debug/chaincash_cli
+          retention-days: 14
