@@ -1,4 +1,7 @@
-use crate::note_history::{sign, NoteHistory, OwnershipEntry};
+use crate::{
+    note_history::{sign, NoteHistory, OwnershipEntry},
+    transactions::reserves::calculate_refund_unlock_height,
+};
 use ergo_lib::{
     ergo_chain_types::{
         ec_point::{exponentiate, generator},
@@ -7,7 +10,9 @@ use ergo_lib::{
     ergotree_interpreter::sigma_protocol::wscalar::Wscalar,
     ergotree_ir::{
         chain::{
-            ergo_box::{BoxId, ErgoBox, NonMandatoryRegisterId, RegisterValueError},
+            ergo_box::{
+                box_value::BoxValue, BoxId, ErgoBox, NonMandatoryRegisterId, RegisterValueError,
+            },
             token::{Token, TokenAmount, TokenId},
         },
         mir::{avl_tree_data::AvlTreeData, constant::TryExtractInto},
@@ -167,10 +172,13 @@ impl Note {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ReserveBoxSpec {
     pub owner: EcPoint,
-    pub refund_height: Option<i64>,
+    /// Block height when an active refund was initiated (`R5[Int]` in the reserve contract).
+    pub refund_height: Option<i32>,
+    /// Maximum nanoERG amount announced for refund (`R6[Long]` in the reserve contract).
+    pub refund_amount: Option<i64>,
     pub identifier: TokenId,
     #[serde(skip)]
     inner: ErgoBox,
@@ -182,6 +190,18 @@ impl ReserveBoxSpec {
     }
     pub fn ergo_box(&self) -> &ErgoBox {
         &self.inner
+    }
+    pub fn has_active_refund(&self) -> bool {
+        self.refund_height.is_some()
+    }
+    pub fn max_refundable_nanoergs(&self) -> u64 {
+        self.inner
+            .value
+            .as_u64()
+            .saturating_sub(*BoxValue::SAFE_USER_MIN.as_u64())
+    }
+    pub fn refund_unlock_height(&self) -> Option<u32> {
+        self.refund_height.map(calculate_refund_unlock_height)
     }
 }
 
@@ -205,11 +225,24 @@ impl TryFrom<&ErgoBox> for ReserveBoxSpec {
         let refund_height = value
             .get_register(NonMandatoryRegisterId::R5.into())?
             .map(|reg| {
+                if reg.tpe == SType::SInt {
+                    Ok(reg.v.try_extract_into::<i32>().unwrap())
+                } else {
+                    Err(Error::InvalidType {
+                        field: "refund_height".to_owned(),
+                        tpe: reg.tpe,
+                    })
+                }
+            })
+            .transpose()?;
+        let refund_amount = value
+            .get_register(NonMandatoryRegisterId::R6.into())?
+            .map(|reg| {
                 if reg.tpe == SType::SLong {
                     Ok(reg.v.try_extract_into::<i64>().unwrap())
                 } else {
                     Err(Error::InvalidType {
-                        field: "refund_height".to_owned(),
+                        field: "refund_amount".to_owned(),
                         tpe: reg.tpe,
                     })
                 }
@@ -219,13 +252,13 @@ impl TryFrom<&ErgoBox> for ReserveBoxSpec {
             .tokens
             .as_ref()
             .ok_or_else(|| Error::FieldNotSet("reserve box missing NFT"))?
-            .get(0)
-            .ok_or_else(|| Error::FieldNotSet("token at index 0 missing, no identifier nft"))?
+            .first()
             .token_id;
 
         Ok(Self {
             owner,
             refund_height,
+            refund_amount,
             identifier,
             inner: value.clone(),
         })

@@ -222,5 +222,36 @@ send JSON via POST method like
 
 * Get note acceptance rules ( `http://127.0.0.1:8080/api/v1/acceptance/` )
 
+* Initiate a reserve refund ( `http://127.0.0.1:8080/api/v1/reserves/refund` - POST method )
+
+Initiating a refund writes the current block height (`R5`) and requested refund cap in nanoErgs (`R6`) into the reserve box without withdrawing collateral immediately. After the on-chain timelock (`14400` blocks, ~20 days) expires, the server's background refund worker automatically executes the refund withdrawal. If `amount` is omitted, it defaults to the maximum refundable balance (`reserve.value - 1000000` nanoErgs).
+
+```json
+{
+  "reserve_id": "0f44aa54140dbd5368b44358630d5ca4e38e6405f76bd987e18d7eae667915db",
+  "amount": 1000000000
+}
+```
+
+* Cancel an active refund ( `http://127.0.0.1:8080/api/v1/reserves/refund/cancel` - POST method )
+
+```json
+{
+  "reserve_id": "0f44aa54140dbd5368b44358630d5ca4e38e6405f76bd987e18d7eae667915db"
+}
+```
+
+* Complete an unlocked refund on demand ( `http://127.0.0.1:8080/api/v1/reserves/refund/complete` - POST method )
+
+```json
+{
+  "reserve_id": "0f44aa54140dbd5368b44358630d5ca4e38e6405f76bd987e18d7eae667915db"
+}
+```
+
+* Get past and current refunds and their statuses ( `http://127.0.0.1:8080/api/v1/reserves/refunds` - GET method )
+
+Supports optional query filters `?reserve_id=<reserveNftId>` and `?status=<pending|executing|completed|cancelled|failed>`, as well as fetching an individual refund by id via `http://127.0.0.1:8080/api/v1/reserves/refunds/:id`.
+
 [Discord badge]: https://img.shields.io/discord/668903786361651200?logo=discord&style=social
 [Discord link]: https://discord.gg/ergo-platform-668903786361651200

@@ -59,6 +59,30 @@ pub enum TransactionError {
     TopUpAmountError(u64),
 
     #[error(
+        "Invalid refund amount {requested} nanoERG (reserve holds {reserve_value} nanoERG, max refundable {max_refundable} nanoERG)"
+    )]
+    InvalidRefundAmount {
+        requested: u64,
+        max_refundable: u64,
+        reserve_value: u64,
+    },
+
+    #[error("Reserve {0:?} already has an active refund pending")]
+    RefundAlreadyActive(TokenId),
+
+    #[error("Reserve {0:?} does not have an active refund")]
+    NoActiveRefund(TokenId),
+
+    #[error(
+        "Refund on reserve {reserve_id:?} is timelocked until height {unlock_height} (current height {current_height})"
+    )]
+    RefundTimelockActive {
+        reserve_id: TokenId,
+        unlock_height: u32,
+        current_height: u32,
+    },
+
+    #[error(
         "Attempted to redeem from reserve {0:?}, note does not include ownership entry for this reserve"
     )]
     ReserveEntryNotFound(TokenId),

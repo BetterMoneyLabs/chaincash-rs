@@ -35,6 +35,19 @@ erDiagram
         int type "Type enum of the denomination, 0 = erg, 1 = gold"
         int nanoerg_per_unit "The conversion rate of this denomination in nanoergs"
     }
+    REFUND {
+        int id PK
+        string reserve_id "Singleton NFT id of the refunded reserve"
+        string reserve_box_id "Reserve box id carrying or settling the refund"
+        int requested_amount "Maximum nanoErgs announced for withdrawal in R6"
+        int refunded_amount "Actual nanoErgs withdrawn once completed"
+        int init_height "Initiation block height recorded in R5"
+        int settled_height "Block height when completed or cancelled"
+        string status "pending, executing, completed, cancelled, or failed"
+        string init_tx_id "Transaction id that initiated the refund"
+        string refund_tx_id "Transaction id that completed or cancelled the refund"
+        string error_message "Diagnostic failure reason when failed or retrying"
+    }
     NOTE ||--|{ OWNERSHIP_ENTRY : "has"
     NOTE ||--|| DENOMINATION : "has"
     NOTE ||--|| ERGO_BOX : "is a"

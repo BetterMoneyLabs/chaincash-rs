@@ -1,6 +1,7 @@
 pub mod ergo_boxes;
 pub mod error;
 pub mod notes;
+pub mod refunds;
 pub mod reserves;
 pub mod scans;
 pub mod schema;
@@ -12,6 +13,7 @@ use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use ergo_boxes::ErgoBoxRepository;
 pub use error::Error;
 use notes::NoteRepository;
+use refunds::RefundRepository;
 use reserves::ReserveRepository;
 use scans::ScanRepository;
 use std::borrow::BorrowMut;
@@ -67,6 +69,10 @@ impl ChainCashStore {
 
     pub fn reserves(&self) -> ReserveRepository {
         ReserveRepository::new(self.pool.clone())
+    }
+
+    pub fn refunds(&self) -> RefundRepository {
+        RefundRepository::new(self.pool.clone())
     }
 
     pub fn ergo_boxes(&self) -> ErgoBoxRepository {

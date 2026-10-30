@@ -13,4 +13,19 @@ pub enum Error {
 
     #[error("Failed to extract spec from box")]
     BoxSpec(#[from] chaincash_offchain::boxes::Error),
+
+    #[error("Reserve {0} already has an active refund")]
+    DuplicateActiveRefund(String),
+
+    #[error("Invalid refund status '{0}'")]
+    InvalidRefundStatus(String),
+
+    #[error("Invalid reserve token identifier '{0}'")]
+    InvalidReserveTokenId(String),
+}
+
+impl Error {
+    pub fn is_not_found(&self) -> bool {
+        matches!(self, Self::Diesel(diesel::result::Error::NotFound))
+    }
 }

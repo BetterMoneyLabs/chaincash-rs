@@ -40,6 +40,22 @@ diesel::table! {
 }
 
 diesel::table! {
+    refunds (id) {
+        id -> Integer,
+        reserve_id -> Text,
+        reserve_box_id -> Nullable<Text>,
+        requested_amount -> BigInt,
+        refunded_amount -> Nullable<BigInt>,
+        init_height -> Integer,
+        settled_height -> Nullable<Integer>,
+        status -> Text,
+        init_tx_id -> Nullable<Text>,
+        refund_tx_id -> Nullable<Text>,
+        error_message -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
     reserves (id) {
         id -> Integer,
         identifier -> Text,
@@ -68,6 +84,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     ergo_boxes,
     notes,
     ownership_entries,
+    refunds,
     reserves,
     scans,
 );

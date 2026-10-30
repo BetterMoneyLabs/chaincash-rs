@@ -86,7 +86,7 @@ impl<'a> ContractScan<'a> {
 }
 
 // Wait for the next block before re-checking scans
-async fn wait_scan_block(state: &ServerState) -> Result<(), ScannerError> {
+pub(crate) async fn wait_scan_block(state: &ServerState) -> Result<(), ScannerError> {
     let wallet = state.node.endpoints().wallet()?;
     let cur_wallet_height = wallet.status().await?.wallet_height;
     while wallet.status().await?.wallet_height == cur_wallet_height {
@@ -173,10 +173,19 @@ async fn get_all_scan_boxes(
 async fn reserve_scanner(state: Arc<ServerState>, scan_ids: Vec<i32>) -> Result<(), ScannerError> {
     loop {
         let scan_boxes = get_all_scan_boxes(&scan_ids, &state).await?;
+        let mut keep_box_ids: Vec<_> = scan_boxes.iter().map(|b| b.ergo_box.box_id()).collect();
         for scan_box in &scan_boxes {
             match ReserveBoxSpec::try_from(&scan_box.ergo_box) {
                 Ok(reserve_box) => {
-                    state.store.reserves().add_or_update(&reserve_box)?;
+                    if state.store.refunds().sync_scanned_reserve(&reserve_box)? {
+                        state.store.reserves().add_or_update(&reserve_box)?;
+                    } else if let Ok(current) = state
+                        .store
+                        .reserves()
+                        .get_reserve_by_identifier(&reserve_box.identifier)
+                    {
+                        keep_box_ids.push(current.box_id());
+                    }
                 }
                 Err(e) => warn!(
                     "Failed to import box {} from scan, err: {e}",
@@ -187,7 +196,7 @@ async fn reserve_scanner(state: Arc<ServerState>, scan_ids: Vec<i32>) -> Result<
         state
             .store
             .reserves()
-            .delete_not_in(scan_boxes.iter().map(|b| b.ergo_box.box_id()))?
+            .delete_not_in(keep_box_ids.into_iter())?
             .into_iter()
             .for_each(|deleted| info!("Deleting box id: {deleted}"));
         wait_scan_block(&state).await?;
