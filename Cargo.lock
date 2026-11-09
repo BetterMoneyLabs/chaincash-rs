@@ -479,6 +479,7 @@ dependencies = [
  "ergo_client",
  "reqwest",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

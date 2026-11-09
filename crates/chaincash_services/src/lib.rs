@@ -27,9 +27,10 @@ impl ServerState {
         store: ChainCashStore,
         predicates: Vec<Predicate>,
     ) -> Result<Self, NodeError> {
+        let chain = ChainSource::new(node.clone(), api_key)?;
         Ok(ServerState {
-            compiler: Compiler::new(node.clone()),
-            chain: ChainSource::new(node.clone(), api_key)?,
+            compiler: Compiler::new(chain.clone()),
+            chain,
             node,
             store,
             predicates,
