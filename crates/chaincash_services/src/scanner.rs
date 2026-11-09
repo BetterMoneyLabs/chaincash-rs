@@ -3,14 +3,15 @@ use std::{borrow::Cow, sync::Arc, time::Duration};
 use chaincash_offchain::{
     boxes::{Note, ReserveBoxSpec},
     note_history::{NoteHistory, NoteHistoryError, OwnershipEntry},
+    oracle::{buyback_nft, oracle_nft},
 };
 use chaincash_store::scans::ScanType;
 use ergo_client::node::{
     endpoints::scan::{RegisteredScan, Scan, ScanBox, TrackingRule},
-    NodeClient, NodeError,
+    NodeError,
 };
 use ergo_lib::{
-    chain::transaction::{ergo_transaction::ErgoTransaction, Transaction, TxId},
+    chain::transaction::{ergo_transaction::ErgoTransaction, TxId},
     ergotree_ir::{
         chain::{
             ergo_box::{ErgoBox, RegisterId},
@@ -23,7 +24,7 @@ use ergo_lib::{
 use thiserror::Error;
 use tracing::{info, warn};
 
-use crate::ServerState;
+use crate::{chain::BoxIndex, ServerState};
 
 #[derive(Error, Debug)]
 pub enum ScannerError {
@@ -37,6 +38,8 @@ pub enum ScannerError {
     NoteHistoryError(#[from] chaincash_offchain::note_history::NoteHistoryError),
     #[error("Data input not found for TX {0}")]
     InvalidTransaction(TxId),
+    #[error("Transaction {0} not found")]
+    TransactionNotFound(TxId),
     #[error("Note {0:?} validation failed at TX id: {1}, reserve contract invalid")]
     InvalidReserveBox(TokenId, TxId),
 }
@@ -93,19 +96,6 @@ async fn wait_scan_block(state: &ServerState) -> Result<(), ScannerError> {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
     Ok(())
-}
-
-async fn get_transaction(
-    node: &NodeClient,
-    tx_id: &TxId,
-) -> Result<Option<Transaction>, NodeError> {
-    let indexer = node.endpoints().blockchain()?;
-    let blocks_endpoint = node.endpoints().blocks()?;
-    Ok(blocks_endpoint
-        .transactions(&indexer.get_transaction_by_id(tx_id).await?.block_id)
-        .await?
-        .into_iter()
-        .find(|tx| tx.id() == *tx_id))
 }
 
 // Load scans by type. If node changes then wrong scans will be detected and re-registered
@@ -194,20 +184,27 @@ async fn reserve_scanner(state: Arc<ServerState>, scan_ids: Vec<i32>) -> Result<
     }
 }
 
-async fn note_backward_scan(state: &ServerState, note_box: ErgoBox) -> Result<Note, ScannerError> {
-    let indexer = &state.node.endpoints().blockchain()?;
+async fn note_backward_scan(
+    state: &ServerState,
+    box_index: &BoxIndex,
+    note_box: ErgoBox,
+    inclusion_height: Option<u32>,
+) -> Result<Note, ScannerError> {
+    let chain = &state.chain;
     let note_token_id = note_box.tokens.as_ref().unwrap().first().token_id;
     let mut history = Vec::new();
     let mut cur_box = Cow::Borrowed(&note_box);
+    let mut cur_height = inclusion_height;
     'outer: loop {
         if let Some((id, old_note)) = state.store.notes().get_by_box_id(&cur_box.box_id())? {
             history.extend(old_note.history.ownership_entries().iter().rev().cloned());
             state.store.notes().delete_note(id)?;
             break;
         }
-        let tx = get_transaction(&state.node, &cur_box.transaction_id)
+        let tx = chain
+            .transaction(&cur_box.transaction_id, cur_height)
             .await?
-            .unwrap();
+            .ok_or(ScannerError::TransactionNotFound(cur_box.transaction_id))?;
         if TokenId::from(tx.inputs.first().box_id) == note_token_id {
             // Found transaction where token was minted. Verify all tokens were sent to note contract
             let output_count = tx
@@ -223,22 +220,24 @@ async fn note_backward_scan(state: &ServerState, note_box: ErgoBox) -> Result<No
         let Some(reserve_input) = tx.data_inputs().map(|di| &di[0]) else {
             return Err(ScannerError::InvalidTransaction(tx.id()));
         };
-        let reserve_box = ReserveBoxSpec::try_from(
-            &indexer.get_box_by_id(&reserve_input.box_id).await?.ergo_box,
-        )?;
+        let Some((reserve_box, _)) = chain.box_by_id(&reserve_input.box_id, box_index).await?
+        else {
+            return Err(ScannerError::InvalidReserveBox(note_token_id, tx.id()));
+        };
+        let reserve_box = ReserveBoxSpec::try_from(&reserve_box)?;
         if reserve_box.ergo_box().ergo_tree != *state.compiler.reserve_contract().await? {
             return Err(ScannerError::InvalidReserveBox(note_token_id, tx.id()));
         }
         for input in tx.inputs.iter() {
-            let input_box = indexer.get_box_by_id(&input.box_id).await?;
-            if let Some(token) = input_box
-                .ergo_box
-                .tokens
-                .as_ref()
-                .map(|tokens| tokens.first())
-            {
+            // Without an indexer only boxes tracked by the note scan can be found. Any other input
+            // can't be a note box, so skipping it is fine
+            let Some((input_box, input_height)) = chain.box_by_id(&input.box_id, box_index).await?
+            else {
+                continue;
+            };
+            if let Some(token) = input_box.tokens.as_ref().map(|tokens| tokens.first()) {
                 if token.token_id == note_token_id
-                    && input_box.ergo_box.ergo_tree == *state.compiler.note_contract().await?
+                    && input_box.ergo_tree == *state.compiler.note_contract().await?
                 {
                     let ownership_entry = OwnershipEntry::from_context_extension(
                         *token.amount.as_u64(),
@@ -246,7 +245,8 @@ async fn note_backward_scan(state: &ServerState, note_box: ErgoBox) -> Result<No
                         &input.spending_proof.extension,
                     )?;
                     history.push(ownership_entry);
-                    cur_box = Cow::Owned(input_box.ergo_box);
+                    cur_box = Cow::Owned(input_box);
+                    cur_height = input_height;
                     continue 'outer;
                 }
             }
@@ -269,9 +269,15 @@ async fn note_backward_scan(state: &ServerState, note_box: ErgoBox) -> Result<No
     Ok(note)
 }
 
-async fn note_scanner(state: Arc<ServerState>, scan_ids: Vec<i32>) -> Result<(), ScannerError> {
+async fn note_scanner(
+    state: Arc<ServerState>,
+    scan_ids: Vec<i32>,
+    reserve_scan_ids: Vec<i32>,
+) -> Result<(), ScannerError> {
+    let lookup_scan_ids: Vec<i32> = scan_ids.iter().chain(&reserve_scan_ids).copied().collect();
     loop {
         let scan_boxes = get_all_scan_boxes(&scan_ids, &state).await.unwrap();
+        let mut box_index: Option<BoxIndex> = None;
         for scan_box in &scan_boxes {
             let box_id = scan_box.ergo_box.box_id();
             if state
@@ -284,7 +290,26 @@ async fn note_scanner(state: Arc<ServerState>, scan_ids: Vec<i32>) -> Result<(),
                 info!("Skipping box {}", scan_box.ergo_box.box_id());
                 continue;
             }
-            match note_backward_scan(&state, scan_box.ergo_box.clone()).await {
+            // Only built when needed: fetches all spent and unspent note/reserve boxes if the node
+            // has no extra index
+            let box_index = match box_index {
+                Some(ref index) => index,
+                None => match state.chain.box_index(&lookup_scan_ids).await {
+                    Ok(index) => box_index.insert(index),
+                    Err(e) => {
+                        warn!("Failed to load scan boxes, retrying next block: {e}");
+                        break;
+                    }
+                },
+            };
+            match note_backward_scan(
+                &state,
+                box_index,
+                scan_box.ergo_box.clone(),
+                scan_box.inclusion_height,
+            )
+            .await
+            {
                 Ok(note) => {
                     state.store.notes().add_note(&note).unwrap();
                 }
@@ -305,20 +330,31 @@ async fn note_scanner(state: Arc<ServerState>, scan_ids: Vec<i32>) -> Result<(),
 }
 
 pub async fn start_scanner(state: Arc<ServerState>) -> Result<(), ScannerError> {
-    if let Err(NodeError::BadRequest(_)) =
-        state.node.endpoints().blockchain()?.indexed_height().await
-    {
-        panic!("/blockchain/indexedHeight failed. Please enable extra indexing: https://docs.ergoplatform.com/node/conf/conf-node/#extra-index");
-    };
     let scans = state.node.endpoints().scan()?.list_all().await?;
     let (mut needs_rescan, reserve_scans) = load_scan(&state, ScanType::Reserves, &scans).await?;
     let (rescan, note_scans) = load_scan(&state, ScanType::Notes, &scans).await?;
     needs_rescan |= rescan;
+    if state.chain.has_indexer().await? {
+        info!("Node extra indexing enabled, using indexer API");
+    } else {
+        info!("Node extra indexing not enabled, using scans for blockchain lookups");
+        // Oracle & buyback boxes are needed for note redemption. Without an indexer they are
+        // found through scans
+        let is_mainnet = state.node.endpoints().root()?.info().await?.network == "mainnet";
+        needs_rescan |= state
+            .chain
+            .ensure_token_scan("Chaincash oracle scan", oracle_nft(is_mainnet))
+            .await?;
+        needs_rescan |= state
+            .chain
+            .ensure_token_scan("Chaincash buyback scan", buyback_nft(is_mainnet))
+            .await?;
+    }
     if needs_rescan {
         //Rescan from block #1,318_639. This height can be increased later when chaincash is deployed
         let _ = state.node.endpoints().wallet()?.rescan(1_318_639).await;
     }
-    tokio::spawn(reserve_scanner(state.clone(), reserve_scans));
-    tokio::spawn(note_scanner(state.clone(), note_scans));
+    tokio::spawn(reserve_scanner(state.clone(), reserve_scans.clone()));
+    tokio::spawn(note_scanner(state.clone(), note_scans, reserve_scans));
     Ok(())
 }

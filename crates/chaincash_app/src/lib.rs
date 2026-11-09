@@ -87,7 +87,12 @@ impl ChainCashApp {
 
         let node = node_from_config(&self.config.node)?;
 
-        let state = Arc::new(ServerState::new(node, store, predicates));
+        let state = Arc::new(ServerState::new(
+            node,
+            self.config.node.api_key(),
+            store,
+            predicates,
+        )?);
         start_scanner(state.clone()).await.unwrap();
         Ok(Server::serve(listener, state).await?)
     }
