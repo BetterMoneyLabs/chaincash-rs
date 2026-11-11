@@ -5,43 +5,45 @@ use chaincash_services::ServerState;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+fn internal_error(e: impl std::fmt::Display) -> (StatusCode, String) {
+    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+}
+
 pub async fn healthcheck(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let url = state.node.endpoints().url();
-    let url2 = url.join("blockchain/indexedHeight").map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to join URL: {}", e),
-        )
-    })?;
-    let response = reqwest::get(url2)
+    let info = state
+        .node
+        .endpoints()
+        .root()
+        .map_err(internal_error)?
+        .info()
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to make request: {}", e),
-            )
-        })?
-        .text()
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get response text: {}", e),
-            )
-        })?;
+        .map_err(|e| internal_error(format!("Failed to reach node: {e}")))?;
 
-    let response_json: Value = serde_json::from_str(&response).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Invalid JSON response: {}", e),
-        )
-    })?;
-    let combined = json!({
-        "status": "Node running",
-        "response": response_json
+    let mut response = json!({
+        "network": info.network,
+        "fullHeight": info.full_height,
+        "headersHeight": info.headers_height,
     });
 
-    Ok(Json(combined))
+    // Extra indexing is optional. Report its progress if the node has it enabled
+    let indexed = state.chain.has_indexer().await.map_err(internal_error)?;
+    if indexed {
+        let indexed_height = state
+            .node
+            .endpoints()
+            .blockchain()
+            .map_err(internal_error)?
+            .indexed_height()
+            .await
+            .map_err(internal_error)?;
+        response["indexedHeight"] = indexed_height.indexed_height.into();
+    }
+    response["indexed"] = indexed.into();
+
+    Ok(Json(json!({
+        "status": "Node running",
+        "response": response
+    })))
 }

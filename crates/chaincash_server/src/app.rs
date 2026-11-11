@@ -55,11 +55,15 @@ mod tests {
         )
         .unwrap();
 
-        Arc::new(ServerState::new(
-            node,
-            ChainCashStore::open_in_memory().unwrap(),
-            vec![],
-        ))
+        Arc::new(
+            ServerState::new(
+                node,
+                "hello",
+                ChainCashStore::open_in_memory().unwrap(),
+                vec![],
+            )
+            .unwrap(),
+        )
     }
     #[tokio::test]
     async fn test_healthcheck() {

@@ -7,8 +7,10 @@ license.workspace = true
 [dependencies]
 bs58 = "0.5.0"
 serde = { workspace = true }
+serde_json = { workspace = true }
 ergo-lib = { workspace = true }
 ergo_client = { workspace = true }
+reqwest = { version = "0.11", features = ["json"] }
 chaincash_store = { path = "../chaincash_store" }
 chaincash_offchain = { path = "../chaincash_offchain" }
 chaincash_predicate = { path = "../chaincash_predicate" }

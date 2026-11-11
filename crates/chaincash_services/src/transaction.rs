@@ -9,7 +9,6 @@ use chaincash_offchain::transactions::reserves::{
 };
 use chaincash_offchain::transactions::{TransactionError, TxContext};
 use chaincash_store::ChainCashStore;
-use ergo_client::node::endpoints::blockchain::IndexQuery;
 use ergo_client::node::NodeClient;
 use ergo_lib::chain::transaction::Transaction;
 use ergo_lib::ergo_chain_types::EcPoint;
@@ -23,6 +22,7 @@ use ergo_lib::wallet::tx_builder::SUGGESTED_TX_FEE;
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::chain::ChainSource;
 use crate::compiler::Compiler;
 
 #[derive(Debug, Error)]
@@ -47,6 +47,9 @@ pub enum TransactionServiceError {
 
     #[error("Reserve Box not found")]
     ReserveBoxNotFound,
+
+    #[error("No unspent box found holding {0} NFT")]
+    NftBoxNotFound(&'static str),
 }
 
 #[derive(Deserialize)]
@@ -74,14 +77,21 @@ pub struct RedeemNoteRequest {
 #[derive(Clone)]
 pub struct TransactionService<'a> {
     node: &'a NodeClient,
+    chain: &'a ChainSource,
     compiler: &'a Compiler,
     store: &'a ChainCashStore,
 }
 
 impl<'a> TransactionService<'a> {
-    pub fn new(node: &'a NodeClient, store: &'a ChainCashStore, compiler: &'a Compiler) -> Self {
+    pub fn new(
+        node: &'a NodeClient,
+        chain: &'a ChainSource,
+        store: &'a ChainCashStore,
+        compiler: &'a Compiler,
+    ) -> Self {
         Self {
             node,
+            chain,
             store,
             compiler,
         }
@@ -239,40 +249,18 @@ impl<'a> TransactionService<'a> {
             .get_reserve_by_identifier(&request.reserve_id)?;
         let receipt_contract = self.compiler.receipt_contract().await?;
         let is_mainnet = self.node.endpoints().root()?.info().await?.network == "mainnet";
-        let buyback_box = &self
-            .node
-            .endpoints()
-            .blockchain()?
-            .get_unspent_boxes_by_token_id(
-                &String::from(buyback_nft(is_mainnet)),
-                IndexQuery {
-                    offset: 0,
-                    limit: 1,
-                    sort_direction:
-                        ergo_client::node::endpoints::blockchain::SortDirection::Descending,
-                    include_unconfirmed: true,
-                },
-            )
-            .await?[0]
-            .ergo_box;
+        let buyback_box = self
+            .chain
+            .unspent_box_by_token(buyback_nft(is_mainnet))
+            .await?
+            .ok_or(TransactionServiceError::NftBoxNotFound("buyback"))?;
         let wallet_boxes = self.node.extensions().get_utxos().await?;
         let tx_context = self.get_tx_ctx().await?;
-        let oracle_box = &self
-            .node
-            .endpoints()
-            .blockchain()?
-            .get_unspent_boxes_by_token_id(
-                &String::from(oracle_nft(is_mainnet)),
-                IndexQuery {
-                    offset: 0,
-                    limit: 1,
-                    sort_direction:
-                        ergo_client::node::endpoints::blockchain::SortDirection::Descending,
-                    include_unconfirmed: true,
-                },
-            )
-            .await?[0]
-            .ergo_box;
+        let oracle_box = self
+            .chain
+            .unspent_box_by_token(oracle_nft(is_mainnet))
+            .await?
+            .ok_or(TransactionServiceError::NftBoxNotFound("oracle"))?;
         let tx = redeem_note(
             &note_box,
             &reserve_box,

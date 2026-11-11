@@ -10,6 +10,12 @@ pub struct Config {
     api_key: String,
 }
 
+impl Config {
+    pub fn api_key(&self) -> &str {
+        &self.api_key
+    }
+}
+
 pub fn node_from_config(cfg: &Config) -> Result<NodeClient, NodeError> {
     Ok(NodeClient::from_url_str(
         &cfg.url,
