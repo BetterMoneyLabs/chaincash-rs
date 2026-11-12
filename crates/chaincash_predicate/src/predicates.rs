@@ -30,6 +30,14 @@ impl Predicate {
 
         Ok(toml::from_str(&s)?)
     }
+
+    pub fn uses_collateral(&self) -> bool {
+        match self {
+            Predicate::Collateral(_) => true,
+            Predicate::Or(p) => p.uses_collateral(),
+            Predicate::Whitelist(_) | Predicate::Blacklist(_) => false,
+        }
+    }
 }
 
 impl Accept for Predicate {

@@ -29,6 +29,10 @@ pub enum ApiError {
     TransactionService(#[from] chaincash_services::transaction::TransactionServiceError),
     #[error("Store error: {0}")]
     StoreError(#[from] chaincash_store::Error),
+    #[error("Invalid note: {0}")]
+    InvalidNote(String),
+    #[error("Oracle error: {0}")]
+    OracleError(String),
 }
 
 impl IntoResponse for ApiError {
@@ -36,6 +40,8 @@ impl IntoResponse for ApiError {
         let (status_code, msg) = match self {
             ApiError::TransactionService(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             ApiError::StoreError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            ApiError::InvalidNote(msg) => (StatusCode::BAD_REQUEST, msg),
+            ApiError::OracleError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
         let body = Json(json!({
             "error": {

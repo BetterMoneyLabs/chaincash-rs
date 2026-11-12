@@ -19,13 +19,17 @@ pub struct Blacklist {
 impl Accept for Blacklist {
     fn accept<P: ContextProvider>(&self, context: &PredicateContext<P>) -> bool {
         match self.kind {
-            BlacklistKind::Issuer => !self.agents.contains(&context.note.issuer),
-            BlacklistKind::Owner => !self.agents.contains(&context.note.owner),
+            BlacklistKind::Issuer => {
+                !context.note.issuer.is_empty() && !self.agents.contains(&context.note.issuer)
+            }
+            BlacklistKind::Owner => {
+                !context.note.owner.is_empty() && !self.agents.contains(&context.note.owner)
+            }
             BlacklistKind::Historical => context
                 .note
                 .signers
                 .iter()
-                .all(|s| !self.agents.contains(s)),
+                .all(|s| !s.is_empty() && !self.agents.contains(s)),
         }
     }
 }

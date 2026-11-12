@@ -222,5 +222,31 @@ send JSON via POST method like
 
 * Get note acceptance rules ( `http://127.0.0.1:8080/api/v1/acceptance/` )
 
+* Check whether a JSON-encoded note is accepted ( `http://127.0.0.1:8080/api/v1/acceptance/checkNote` - POST method )
+
+Accepts a JSON-encoded ChainCash note in any of the following forms:
+1. A wallet/store note JSON object (such as an entry returned by `/api/v1/notes/wallet` or `/api/v1/notes/byPubkey/:pubkey`):
+```json
+{
+  "identifier": "4b2d8b7beb3eaac8234d9e61792d270898a43934d6a27275e4f3a044609c9f2a",
+  "value": 1000,
+  "owner": "02b8466784b34d5393a46b789f27b66f7fd34e1a06faf0d7941e204d71ead6ccdd",
+  "history": [
+    {
+      "amount": 1000,
+      "position": 0,
+      "reserve_nft_id": "0f44aa54140dbd5368b44358630d5ca4e38e6405f76bd987e18d7eae667915db"
+    }
+  ]
+}
+```
+2. A raw Ergo note box JSON object (`ErgoBox`), or `{ "ergo_box": <ErgoBox>, "history": [...] }` (with optional hex/byte `signature` entries to verify the `R4` AVL digest for unindexed boxes).
+3. A pre-resolved predicate `NoteContext` JSON object (`{ "nanoerg": 1000000, "owner": "...", "issuer": "...", "signers": ["..."] }`).
+
+Returns:
+```json
+{"accepted":true}
+```
+
 [Discord badge]: https://img.shields.io/discord/668903786361651200?logo=discord&style=social
 [Discord link]: https://discord.gg/ergo-platform-668903786361651200

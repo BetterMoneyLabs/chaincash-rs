@@ -13,4 +13,7 @@ pub enum Error {
 
     #[error("Failed to extract spec from box")]
     BoxSpec(#[from] chaincash_offchain::boxes::Error),
+
+    #[error("Failed to parse serialized Ergo box: {0}")]
+    SigmaParsing(#[from] ergo_lib::ergotree_ir::serialization::SigmaParsingError),
 }

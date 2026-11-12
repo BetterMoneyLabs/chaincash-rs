@@ -36,7 +36,10 @@ pub struct ChainCashStore {
 }
 
 impl ChainCashStore {
-    pub fn open<S: Into<String>>(store_url: S) -> Result<Self, Error> {
+    fn open_with_max_size<S: Into<String>>(
+        store_url: S,
+        max_size: Option<u32>,
+    ) -> Result<Self, Error> {
         #[derive(Debug)]
         struct CustomizedConnection;
         type ConnectionManagerError =
@@ -49,16 +52,22 @@ impl ChainCashStore {
             }
         }
         let manager = ConnectionManager::<ConnectionType>::new(store_url);
+        let mut builder = Pool::builder().connection_customizer(Box::new(CustomizedConnection));
+        if let Some(max_size) = max_size {
+            builder = builder.max_size(max_size);
+        }
 
         Ok(Self {
-            pool: Pool::builder()
-                .connection_customizer(Box::new(CustomizedConnection))
-                .build(manager)?,
+            pool: builder.build(manager)?,
         })
     }
 
+    pub fn open<S: Into<String>>(store_url: S) -> Result<Self, Error> {
+        Self::open_with_max_size(store_url, None)
+    }
+
     pub fn open_in_memory() -> Result<Self, Error> {
-        Self::open(":memory:")
+        Self::open_with_max_size(":memory:", Some(1))
     }
 
     pub fn notes(&self) -> NoteRepository {

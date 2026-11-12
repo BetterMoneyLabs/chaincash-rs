@@ -20,7 +20,9 @@ use crate::{
     schema, ConnectionPool, ConnectionType, Error,
 };
 
-#[derive(Queryable, Identifiable, Selectable, Associations, PartialEq, Serialize)]
+#[derive(
+    Queryable, Identifiable, Selectable, Associations, Clone, Debug, PartialEq, Eq, Serialize,
+)]
 #[diesel(belongs_to(ErgoBox, foreign_key = box_id))]
 #[diesel(table_name = schema::notes)]
 pub struct Note {
@@ -43,7 +45,17 @@ struct NewNote<'a> {
     owner: &'a str,
 }
 
-#[derive(Queryable, Identifiable, Selectable, Associations, PartialEq, Serialize)]
+#[derive(Queryable, Identifiable, Selectable, Clone, Debug, PartialEq, Eq)]
+#[diesel(table_name = schema::denominations)]
+pub struct Denomination {
+    pub id: i32,
+    pub type_: i32,
+    pub nanoerg_per_unit: Option<i32>,
+}
+
+#[derive(
+    Queryable, Identifiable, Selectable, Associations, Clone, Debug, PartialEq, Eq, Serialize,
+)]
 #[diesel(table_name = schema::ownership_entries)]
 #[diesel(belongs_to(Note))]
 pub struct OwnershipEntry {
@@ -56,6 +68,24 @@ pub struct OwnershipEntry {
     reserve_nft_id: String,
     #[serde(skip)]
     signature: Vec<u8>,
+}
+
+impl OwnershipEntry {
+    pub fn amount(&self) -> i64 {
+        self.amount
+    }
+
+    pub fn position(&self) -> i64 {
+        self.position
+    }
+
+    pub fn reserve_nft_id(&self) -> &str {
+        &self.reserve_nft_id
+    }
+
+    pub fn signature(&self) -> &[u8] {
+        &self.signature
+    }
 }
 
 impl TryInto<chaincash_offchain::note_history::OwnershipEntry> for OwnershipEntry {
@@ -93,6 +123,18 @@ pub struct NoteWithHistory {
     pub history: Vec<OwnershipEntry>,
 }
 
+/// Stored note row joined with its Ergo box ID, optional denomination, and ordered ownership entries.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredNoteWithHistory {
+    pub id: i32,
+    pub ergo_box_id: String,
+    pub denomination: Option<Denomination>,
+    pub identifier: String,
+    pub value: i64,
+    pub owner: String,
+    pub history: Vec<OwnershipEntry>,
+}
+
 pub struct NoteRepository {
     pool: ConnectionPool,
 }
@@ -126,17 +168,19 @@ impl NoteRepository {
         Ok(())
     }
 
-    /// Attempt to load a Note box from database.
-    pub fn get_note_box(&self, note_id: i32) -> Result<chaincash_offchain::boxes::Note, Error> {
-        let mut conn = self.pool.get()?;
+    fn get_note_box_with_conn(
+        conn: &mut ConnectionType,
+        note_id: i32,
+    ) -> Result<chaincash_offchain::boxes::Note, Error> {
         let (note, ergo_box) = schema::notes::table
             .inner_join(schema::ergo_boxes::table)
             .filter(schema::notes::id.eq(note_id))
             .select((Note::as_select(), ErgoBox::as_select()))
-            .first(conn.borrow_mut())?;
+            .first(conn)?;
         let ownership_entries = OwnershipEntry::belonging_to(&note)
+            .order_by(schema::ownership_entries::position.asc())
             .select(OwnershipEntry::as_select())
-            .load(conn.borrow_mut())?;
+            .load(conn)?;
 
         // Note that we unwrap/expect when deserializing boxes from reserves. This is because any failure here is either a bug in chaincash or some sort of DB corruption
         let ergo_box: chain::ergo_box::ErgoBox = ergo_box
@@ -157,6 +201,12 @@ impl NoteRepository {
             .expect("Failed to parse note from DB"))
     }
 
+    /// Attempt to load a Note box from database.
+    pub fn get_note_box(&self, note_id: i32) -> Result<chaincash_offchain::boxes::Note, Error> {
+        let mut conn = self.pool.get()?;
+        Self::get_note_box_with_conn(conn.borrow_mut(), note_id)
+    }
+
     pub fn get_by_box_id(
         &self,
         box_id: &BoxId,
@@ -169,7 +219,7 @@ impl NoteRepository {
             .first::<i32>(&mut conn)
             .optional()?;
         note_id
-            .map(|id| Ok((id, self.get_note_box(id)?)))
+            .map(|id| Ok((id, Self::get_note_box_with_conn(conn.borrow_mut(), id)?)))
             .transpose()
     }
 
@@ -187,6 +237,50 @@ impl NoteRepository {
             .zip(notes)
             .map(|(history, note)| NoteWithHistory { note, history })
             .collect())
+    }
+
+    pub fn all_notes_with_history(&self) -> Result<Vec<StoredNoteWithHistory>, Error> {
+        let mut conn = self.pool.get()?;
+        let rows: Vec<(Note, ErgoBox, Option<Denomination>)> = schema::notes::table
+            .inner_join(schema::ergo_boxes::table)
+            .left_join(schema::denominations::table)
+            .select((
+                Note::as_select(),
+                ErgoBox::as_select(),
+                Option::<Denomination>::as_select(),
+            ))
+            .load(conn.borrow_mut())?;
+        let notes: Vec<Note> = rows.iter().map(|(note, _, _)| note).cloned().collect();
+        let histories = OwnershipEntry::belonging_to(&notes)
+            .order_by(schema::ownership_entries::position.asc())
+            .select(OwnershipEntry::as_select())
+            .load(conn.borrow_mut())?
+            .grouped_by(&notes);
+
+        Ok(histories
+            .into_iter()
+            .zip(rows)
+            .map(
+                |(history, (note, ergo_box, denomination))| StoredNoteWithHistory {
+                    id: note.id,
+                    ergo_box_id: ergo_box.ergo_id,
+                    denomination,
+                    identifier: note.identifier,
+                    value: note.value,
+                    owner: note.owner,
+                    history,
+                },
+            )
+            .collect())
+    }
+
+    pub fn get_denomination(&self, denomination_id: i32) -> Result<Option<Denomination>, Error> {
+        let mut conn = self.pool.get()?;
+        Ok(schema::denominations::table
+            .filter(schema::denominations::id.eq(denomination_id))
+            .select(Denomination::as_select())
+            .first(conn.borrow_mut())
+            .optional()?)
     }
 
     pub fn add_note(&self, note: &chaincash_offchain::boxes::Note) -> Result<Note, Error> {

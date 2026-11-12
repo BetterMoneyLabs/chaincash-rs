@@ -7,6 +7,12 @@ pub struct Or {
     conditions: Vec<Predicate>,
 }
 
+impl Or {
+    pub(crate) fn uses_collateral(&self) -> bool {
+        self.conditions.iter().any(Predicate::uses_collateral)
+    }
+}
+
 impl Accept for Or {
     fn accept<P: ContextProvider>(&self, context: &PredicateContext<P>) -> bool {
         for condition in &self.conditions {
